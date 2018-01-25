@@ -21,6 +21,8 @@ module Zapiclient::Commands
     attr_accessor :jwt
     attr_accessor :response
 
+
+
     def makeClaim()
       @claim = {}
       @claim[:user] = ENV['ZAPI_USER']
@@ -31,6 +33,10 @@ module Zapiclient::Commands
 
     def getAccessKey()
       return @claim[:accessKey]
+    end
+
+    def getFullUrl()
+      getBaseUrl + @uri
     end
 
     def getBaseUrl()
@@ -65,19 +71,23 @@ module Zapiclient::Commands
     end
 
 
-    def jwt()
+    def jwt(httpmethod='get')
       puts __FILE__ + (__LINE__).to_s + " [Command.jwt]: " + @uri  if @debug
-      return Zapiclient::Commands::Command::generateJwt(@uri, @claim)
+      return Zapiclient::Commands::Command::generateJwt(@uri, @claim, httpmethod)
     end
 
     def self.generateJwt(uri, claim, httpmethod='get')
       puts __FILE__ + (__LINE__).to_s + " [Command,generateJwt]: " + uri.to_s  if @debug
 
-      hash_lib = Digest::SHA256.new
-
       # Examples
       #    uri = 'https://prod-api.zephyr4jiracloud.com/connect/public/rest/api/1.0/cycles/search?projectId=13301&versionId=-1';
       fullUri = ZAPI_BASE_URL + uri
+
+
+      hash_lib = Digest::SHA256.new
+      hash_lib.update(httpmethod + fullUri)
+
+      encodedQsh = hash_lib = Digest::SHA256.hexdigest('hex')
 
       myClaim = Atlassian::Jwt.build_claims(claim[:accessKey], fullUri, httpmethod, claim[:baseUrl])
       jwt = 'JWT ' + JWT.encode(myClaim, claim[:secretKey])
