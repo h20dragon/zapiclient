@@ -11,7 +11,7 @@ module Zapiclient::Commands
 
     def initialize()
       super(BASE_URL)
-      @debug = true
+      @debug = false
       puts __FILE__ + (__LINE__).to_s + " [ZqlValues.init]" if @debug
     end
 
