@@ -56,7 +56,7 @@ module Zapiclient::Commands
 
     def initialize(_uri=nil)
       @uri = _uri
-
+      @debug = false
       puts __FILE__ + (__LINE__).to_s + "  [Command.init]: #{@uri}" if @debug
       _setup()
     end
