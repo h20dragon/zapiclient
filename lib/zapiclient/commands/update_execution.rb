@@ -26,7 +26,8 @@ module Zapiclient::Commands
                       "id" => u[:executionId],
                       "projectId" => u[:projectId].to_s,
                       "issueId" => u[:issueId].to_s,
-                      "versionId" => u[:versionId]
+                      "versionId" => u[:versionId],
+                      "comment" => Zapiclient::Utils.instance.getComment()
                     }.to_json
     end
 
@@ -44,9 +45,19 @@ module Zapiclient::Commands
           :zapiaccesskey =>  ENV['ZAPI_ACCESS_KEY'],
       }
 
+      ## KPP-47   (Cycle: beta1, Version: Release CORE 6.2, Project: Kinetica Playground)
+      puts __FILE__ + (__LINE__).to_s + " update => #{@updateData}" if Zapiclient::Utils.instance.isVerbose?
       @response = RestClient.put getFullUrl,
                                 @updateData, headers
-      return JSON.parse(@response)
+      @rc = JSON.parse(@response)
+
+      if Zapiclient::Utils.instance.isVerbose?
+        puts __FILE__ + (__LINE__).to_s + "== [UpdateExecution Response] =="
+        puts JSON.pretty_generate @rc
+        puts '=' * 72
+      end
+
+      @rc
     end
 
     def execute()
