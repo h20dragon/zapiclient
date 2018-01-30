@@ -13,7 +13,7 @@ module Zapiclient
     def initialize
       @options={}
 
-      [:project, :release, :cycle, :release, :verbose].each do |k|
+      [:comment, :cycle, :project, :release, :verbose].each do |k|
         @options[k]=nil
       end
 
@@ -29,12 +29,19 @@ module Zapiclient
       @options[:release].to_s
     end
 
+    def getComment()
+      @options[:comment].to_s
+    end
     def getCycle()
       @options[:cycle].to_s
     end
 
     def getTestCase()
       @options[:testcase].to_s
+    end
+
+    def isVerbose?
+      @options[:verbose]
     end
 
     def getStatus()
@@ -54,7 +61,7 @@ module Zapiclient
         opt.on('--project [ProjectName]') { |o| @options[:project]=o }
 
         opt.on('--release [ReleaseName]') { |o| @options[:release]=o }
-
+        opt.on('--comment [Comment]') { |o| @options[:comment]=o }
         opt.on('--cycle [Cycle]') { |o| @options[:cycle]=o }
 
         opt.on('--status:execution [pass, fail, unexecuted, wip') { |o| @options[:status][:execution]=o }
