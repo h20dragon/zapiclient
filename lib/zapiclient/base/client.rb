@@ -2,6 +2,7 @@ require 'pp'
 require 'rest_client'
 require 'atlassian/jwt'
 require 'digest'
+require 'json'
 
 require_relative '../base/project'
 
@@ -106,9 +107,116 @@ module Zapiclient
       return _c
     end
 
+    def getIssue(parms)
+      _c = Zapiclient::Commands::GetIssue.new()
+     # _c.execute(parms[:project], parms[:cycleName], parms[:testcase])
+     _c.execute(parms)
+    end
+
+
+    # Get test steps for a provided Testcase (Project/Release needed)
+    def getAllTestSteps(parms)
+      issue = getIssue(parms)
+      puts __FILE__ + (__LINE__).to_s + " getIssue => #{issue}" if Zapiclient::Utils.instance.isVerbose?
+      opt = { :projectId => issue['searchObjectList'][0]['execution']['projectId'].to_s,
+                :issueId => issue['searchObjectList'][0]['execution']['issueId'].to_s
+              }
+      _c = Zapiclient::Commands::GetAllTestSteps.new(opt)
+      testSteps = _c.execute()
+      opt[:testSteps] = testSteps
+      opt
+    end
+
+    # Find a specific test step for a specific TestCase (Project)
+    def getTestStep(parms, step)
+
+      if step.nil?
+        puts "[getTestStep]: \"step\" is required."
+        exit(1)
+      end
+
+      allSteps = getAllTestSteps(parms)
+
+      if allSteps
+        regEx = Regexp.new(step)
+#        testStep = allSteps[:testSteps].find { |s| s['step'].match(/#{step}/)}
+        testStep = allSteps[:testSteps].find { |s| s['step'].match(regEx)}
+      end
+
+      rc = parms
+      rc[:testStep] = testStep
+
+      return rc
+    end
+
+
+
+    def getCycleStepResults(parms)
+      if !parms.has_key?(:cycleName)
+        puts "[getCycleStepResults]: requires CycleName"
+        exit(1);
+      end
+      issue = getIssue(parms)
+      _c = Zapiclient::Commands::GetStepResults.new(issue['searchObjectList'][0]['execution']['id'].to_s, issue['searchObjectList'][0]['execution']['issueId'].to_s)
+      _c.execute()
+    end
+
+
+    def updateCycleTestStepResult(parms, step, status, comment=nil)
+      if !(parms.has_key?(:testcase) || parms.has_key?(:cycleName))
+        puts "[updateCycleTestStepResult]: Missing testcase ID"
+        exit(1)
+      end
+
+      # Get stepId, issueID based on TestCase step
+      hit = getTestStep(parms, step)
+
+      if Zapiclient::Utils.instance.isVerbose?
+        puts __FILE__ + (__LINE__).to_s + " [getTestStep] "
+        puts JSON.pretty_generate hit
+      end
+
+      if !(hit && hit.has_key?(:testStep) && hit[:testStep])
+        puts "[updateCycleTestStepResult]: Test step, #{step}, not found"
+        exit(1)
+      end
+
+      stepID = hit[:testStep]['id'].to_s
+      issueID = hit[:testStep]['issueId'].to_s
+
+      # Get stepResultId
+      executionSteps = getCycleStepResults(parms)
+
+      puts __FILE__ + (__LINE__).to_s + " [getCycleStepResults] #{stepID} => #{executionSteps.keys}" if Zapiclient::Utils.instance.isVerbose?
+
+      step = executionSteps['stepResults'].find { |s| s['stepId']==stepID}
+
+      executionId = step['executionId']
+
+    #  cmd = Zapiclient::Commands::GetStepResultExecution.new(executionId, issueID)
+    #  xx = cmd.execute()
+      if Zapiclient::Utils.instance.isVerbose?
+        puts __FILE__ + (__LINE__).to_s + " [EXECUTION ID: STEP]: #{executionId}"
+        puts __FILE__ + (__LINE__).to_s + " STEP_RESULT_ID: #{step['id']}"
+        puts  JSON.pretty_generate step
+        puts __FILE__ + (__LINE__).to_s + "+++++++++++++++++++++++++++"
+      end
+
+      req = {:stepResultId => step['id'],
+             :issueId => step['issueId'],
+             :executionId => step['executionId']
+            }
+      _c = Zapiclient::Commands::UpdateExecutionStepResult.new( req )
+      _c.execute(status, comment)
+    end
+
+    def updateTestStep(parms)
+      testSteps = getAllTestSteps(parms)
+      _c = Zapiclient::Commands::UpdateTestStep.new(testSteps)
+      _c.execute
+    end
 
     def update(parms)
-
       _project = parms[:project]
       _release = parms[:release]
       _cycle = parms[:cycle]
@@ -119,30 +227,16 @@ module Zapiclient
 
       issue = hits['searchObjectList'][0]
 
-      if _status.match(/pass/i)
-        _status = '1'
-      elsif _status.match(/fail/i)
-        _status = '2'
-      elsif _status.match(/wip/i)
-        _status = '3'
-      elsif _status.match(/block/i)
-        _status = '4'
-      elsif _status.match(/unexecuted/i)
-        _status = '0'
-      else
-        exit 1
-      end
-
-      rec = { :status => _status,  # "1",
+      rec = { :status => Zapiclient::Utils.instance.toStatusId(_status),  # "1",
               :executionId => issue['execution']['id'].to_s,   #"0001516461606832-242ac112-0001",
               :projectId => issue['execution']['projectId'].to_s,   # myProject.getId().to_s,
               :issueId => issue['execution']['issueId'].to_s,
               :versionId => issue['execution']['versionId'].to_s  # myRelease.getId().to_s
       }
 
-      puts "[updateExecution]" if @debug
+      puts "[updateExecution]" if Zapiclient::Utils.instance.isVerbose?
       rc = updateExecution(rec)
-      puts "Update Results => #{rc} to #{_status}" if @debug
+      puts "Update Results => #{rc} to #{_status}" if Zapiclient::Utils.instance.isVerbose?
       return rc
     end
 
