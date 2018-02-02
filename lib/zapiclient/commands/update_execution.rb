@@ -22,6 +22,10 @@ module Zapiclient::Commands
 
       _status = { "id" =>  u[:status] }  # 1, 2, 3, 4
 
+      if Zapiclient::Utils.instance.isVerbose?
+        puts "[UpdateExecution.init]: #{u}"
+      end
+
       @updateData = { "status" => _status,
                       "id" => u[:executionId],
                       "projectId" => u[:projectId].to_s,
