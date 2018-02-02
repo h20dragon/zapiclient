@@ -12,10 +12,10 @@ module Zapiclient::Commands
 
     def initialize()
       super(BASE_URL)
-      @debug = false
+      @debug = true
 
       @zqlQuery = ""
-      puts __FILE__ + (__LINE__).to_s + " [ZqlSearch.init]" if @debug
+      puts __FILE__ + (__LINE__).to_s + " [ZqlSearch.init]" if Zapiclient::Utils.instance.isVerbose?
     end
 
     # 'project="ABC" and versionName="Release CORE 6.2" and cycleName="XYZ"'
@@ -42,7 +42,7 @@ module Zapiclient::Commands
     def execute()
       @response = sendRequest()
 
-      if @debug
+      if Zapiclient::Utils.instance.isVerbose?
         puts __FILE__ + (__LINE__).to_s + "== [ZqlSearch.execute] =="
         puts JSON.pretty_generate @response
         puts '=' * 72
