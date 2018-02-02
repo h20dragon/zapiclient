@@ -13,7 +13,7 @@ module Zapiclient
     def initialize
       @options={}
 
-      [:comment, :cycle, :project, :release, :verbose].each do |k|
+      [:command, :comment, :cycle, :project, :release, :step, :update, :update_teststep_status, :verbose].each do |k|
         @options[k]=nil
       end
 
@@ -30,7 +30,7 @@ module Zapiclient
     end
 
     def getComment()
-      @options[:comment].to_s
+      @options[:comment]
     end
     def getCycle()
       @options[:cycle].to_s
@@ -42,6 +42,10 @@ module Zapiclient
 
     def isVerbose?
       @options[:verbose]
+    end
+
+    def getStep()
+      @options[:step]
     end
 
     def getStatus()
@@ -64,8 +68,12 @@ module Zapiclient
         opt.on('--comment [Comment]') { |o| @options[:comment]=o }
         opt.on('--cycle [Cycle]') { |o| @options[:cycle]=o }
 
+        opt.on('--step [Step]') { |o| @options[:step]=o }
+
         opt.on('--status:execution [pass, fail, unexecuted, wip') { |o| @options[:status][:execution]=o }
 
+        opt.on('--update', "Update execution") { |o| @options[:update] = o }
+        opt.on('--update:teststep:status', "Update test step execution") { |o| @options[:update_teststep_status] = o }
         opt.on('--testcase [TestcaseID]') { |o| @options[:testcase]=o }
 
       end
@@ -80,6 +88,35 @@ module Zapiclient
 
       puts "[parseCommandLine]: #{@options}" if @options[:verbose]
       @options
+    end
+
+    def isUpdate?
+      @options[:update]
+    end
+
+    def isUpdateTestStepStatus?
+      @options[:update_teststep_status]
+    end
+
+    def toStatusId(s)
+      id = 0
+      _status = s.downcase.strip
+      if _status.match(/pass/i)
+        id = '1'
+      elsif _status.match(/fail/i)
+        id = '2'
+      elsif _status.match(/wip/i)
+        id = '3'
+      elsif _status.match(/block/i)
+        id = '4'
+      elsif _status.match(/unexecuted/i)
+        id = '-1'
+      else
+        puts "INVALID_STATUS: #{s.to_s}"
+        exit(1)
+      end
+
+      return id
     end
 
   end
