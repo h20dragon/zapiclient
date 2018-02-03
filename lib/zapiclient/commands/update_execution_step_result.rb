@@ -24,7 +24,7 @@ module Zapiclient::Commands
                       "issueId": u[:issueId],
                       "executionId": u[:executionId]
                     }
-      puts "[UpdateExecution.init]: " + @updateData if Zapiclient::Utils.instance.isVerbose?
+      puts "[UpdateExecution.init]: #{@updateData}" if Zapiclient::Utils.instance.isVerbose?
     end
 
 
