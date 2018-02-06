@@ -51,7 +51,8 @@ module Zapiclient::Commands
       puts __FILE__ + (__LINE__).to_s + " [SearchCycles.execute]" if @debug
       @response = sendRequest()
 
-      if @debug
+      if @debug || true
+        puts __FILE__ + (__LINE__).to_s + " [searchCycle]:"
         puts JSON.pretty_generate @response
       end
 
