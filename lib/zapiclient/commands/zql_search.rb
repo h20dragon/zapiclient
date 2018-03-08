@@ -43,7 +43,7 @@ module Zapiclient::Commands
       @response = sendRequest()
 
       if Zapiclient::Utils.instance.isVerbose?
-        puts __FILE__ + (__LINE__).to_s + "== [ZqlSearch.execute] =="
+        puts __FILE__ + (__LINE__).to_s + "== [ZqlSearch.execute]: #{@zqlQuery} =="
         puts JSON.pretty_generate @response
         puts '=' * 72
       end
