@@ -9,29 +9,18 @@ require_relative '../base/project'
 module Zapiclient
 
   class Client
-
-
     attr_accessor :claim
 
-    # TODO: Leverage command pattern.
-    EXECUTION_CMD="/jira/rest/zapi/latest/execution"
-
-
-    ZAPI_LIST = {
-        :cycle => "/jira/rest/zapi/latest/cycle"
-    }
-
-    EXPECTED_KEYS = { :user => 'ZAPI_USER', :accessKey => 'ZAPI_ACCESS_KEY', :secretKey => 'ZAPI_SECRET_KEY' }
-
+    EXPECTED_KEYS = { :user => 'ZAPI_USER',
+                      :accessKey => 'ZAPI_ACCESS_KEY',
+                      :secretKey => 'ZAPI_SECRET_KEY' }
     attr_accessor :debug
     attr_accessor :user
     attr_accessor :projects
 
-
     def initialize(*p)
-
       @claim = {}
-      @debug = false
+      @debug = Zapiclient::Utils.instance.isVerbose?
 
       if p.size == 0
         puts __FILE__ + (__LINE__).to_s + " Use System Defaults" if @debug
@@ -52,7 +41,249 @@ module Zapiclient
       puts __FILE__ + (__LINE__).to_s + " claim => #{claim}" if @debug
     end
 
+    def _findRelease(parms)
+      _project = parms[:project]
+      _release = parms[:release]
 
+      zqlSearch("project=\"#{_project}\" and fixVersion=\"#{_release}\"")
+    end
+
+    def _findCycle(parms)
+      _project = parms[:project]
+      _release = parms[:release]
+      _cycle = parms[:cycle].to_s
+
+      zqlSearch("project=\"#{_project}\" and fixVersion=\"#{_release}\" and cycleName = \"#{_cycle}\"")
+    end
+
+    def getCycles(opts)
+      hit = _findRelease(opts)
+
+      opts = {
+          :projectId => hit['searchObjectList'][0]['execution']['projectId'].to_s,
+          :versionId => hit['searchObjectList'][0]['execution']['versionId'].to_s,
+          :expand => true
+      }
+
+      _c = Zapiclient::Commands::GetCycles.new(opts)
+      rc = _c.execute()
+
+      if Zapiclient::Utils.instance.isVerbose?
+        puts "[getCycles]: #{opts}"
+        puts JSON.pretty_generate rc
+      end
+
+      rc
+    end
+
+    def findCycle(opt)
+      project = opt[:project]
+      release = opt[:release]
+      cycleName = opt[:cycle]
+      cycleList = getCycles( { :project => project, :release => release })
+      hit = cycleList.find { |c| c['name']==cycleName}
+
+      if hit
+        if  Zapiclient::Utils.instance.isVerbose?
+          puts "Cycle #{cycleName} =>"
+          puts JSON.pretty_generate hit
+        end
+      else
+        puts "Cycle \"#{cycleName}\" was not found"
+        exit(1)
+      end
+
+      hit
+    end
+
+    def _findTestCasePerCycle(parms)
+      _project = parms[:project]
+      _release = parms[:release]
+      _cycle = parms[:cycle]
+      _testcase = parms[:testcase]
+
+      zqlSearch("project=\"#{_project}\" and fixVersion=\"#{_release}\" and cycleName=\"#{_cycle}\" and issue=\"#{_testcase}\"")
+    end
+
+    def addAttachment(parms)
+      _project = parms[:project]
+      _release = parms[:release]
+      _cycle = parms[:cycle]
+      _status = parms[:status]
+      _testcase = parms[:testcase]
+
+      hits = _findTestCasePerCycle(parms)
+
+      issue = hits['searchObjectList'][0]
+
+      if Zapiclient::Utils.instance.isVerbose?
+        puts "[addAttachment]: "
+        puts JSON.pretty_generate issue
+      end
+
+      rec = { # :status => Zapiclient::Utils.instance.toStatusId(_status),  # "1",
+              :executionId => issue['execution']['id'].to_s,   #"0001516461606832-242ac112-0001",
+              :projectId => issue['execution']['projectId'].to_s,   # myProject.getId().to_s,
+              :issueId => issue['execution']['issueId'].to_s,
+              :versionId => issue['execution']['versionId'].to_s,
+              :cycleId => issue['execution']['cycleId'].to_s,
+              :entityName => 'execution',
+              :comment => parms['comment'] || Time.now.to_s
+      }
+      if Zapiclient::Utils.instance.isVerbose?
+        puts "[addAttachment.execute with]: "
+        puts JSON.pretty_generate rec
+      end
+
+      if Zapiclient::Utils.instance.getStatus() && Zapiclient::Utils.instance.isVerbose?
+        puts __FILE__ + (__LINE__).to_s + " => #{Zapiclient::Utils.instance.getStatus()}"
+      end
+
+      _c = Zapiclient::Commands::AddAttachment.new(rec)
+      rc = _c.execute(parms[:file].to_s)
+      puts "AddAttachment Results => #{rc}" if Zapiclient::Utils.instance.isVerbose?
+      return rc
+    end
+
+
+    def createCycle(opts)
+      puts __FILE__ + (__LINE__).to_s + " [createCycle]: #{opts}" if Zapiclient::Utils.instance.isVerbose?
+
+      releaseInfo = _findRelease(opts)
+
+      puts JSON.pretty_generate releaseInfo if Zapiclient::Utils.instance.isVerbose?
+
+      projectId = releaseInfo['searchObjectList'][0]['execution']['projectId']
+      versionId = releaseInfo['searchObjectList'][0]['execution']['versionId']
+
+      puts JSON.pretty_generate releaseInfo if Zapiclient::Utils.instance.isVerbose?
+
+      _c = Zapiclient::Commands::CreateCycle.new()
+
+      createInfo = {
+          "name": opts[:cycleName],
+          "build": Zapiclient::Utils.instance.getBuild().to_s,
+          "environment": Zapiclient::Utils.instance.getEnvironment().to_s,
+          "description": Zapiclient::Utils.instance.getDescription().to_s,
+          #       "startDate":"1485278607",
+          #       "endDate":"1485302400",
+          "projectId":projectId,
+          "versionId":versionId}
+
+      puts "[createInfo] => #{createInfo}" if Zapiclient::Utils.instance.isVerbose?
+
+      _c.execute(createInfo)
+    end
+
+    def addTestToCycle()
+      parms = {
+        :project => Zapiclient::Utils.instance.getProject,
+        :release => Zapiclient::Utils.instance.getRelease,
+        :cycle => Zapiclient::Utils.instance.getCycle
+      }
+      releaseInfo = _findRelease(parms)
+      cycleInfo = findCycle(parms)
+
+
+      if Zapiclient::Utils.instance.isVerbose?
+        puts "Release Info => "
+        puts JSON.pretty_generate releaseInfo
+        puts '_' * 72
+        puts "[addTestsToCycle] cycleInfo => "
+        puts JSON.pretty_generate cycleInfo
+        puts '_' * 72
+      end
+
+      testcaseList = Zapiclient::Utils.instance.getTestCases()
+
+      if Zapiclient::Utils.instance.getFile
+        f = File.new(Zapiclient::Utils.instance.getFile())
+        testcaseList = ""
+        f.each_line { |line| testcaseList+="#{line.strip}, "}
+        testcaseList.gsub!(/\s,\s*$/, '')
+      end
+
+
+      if cycleInfo
+        _c = Zapiclient::Commands::AddTestCycle.new({
+                :projectId => releaseInfo['searchObjectList'][0]['execution']['projectId'],
+                :versionId => releaseInfo['searchObjectList'][0]['execution']['versionId'],
+                :cycleId => cycleInfo['id']
+                                                    })
+        _c.execute(testcaseList)
+      end
+
+    end
+
+    def getCycleExecutions(parms)
+      cycleInfo = _findCycle(parms)
+
+      puts "[cycleInfo]:"
+      puts JSON.pretty_generate cycleInfo
+
+      i=0
+      cycleInfo['searchObjectList'].each do |c|
+        puts __FILE__ + (__LINE__).to_s + "#{i.to_s}. issuekey: #{c['issueKey']}  :  #{c['execution']['status']['name']}"
+        i+=1
+      end
+
+     # projectId = cycleInfo['searchObjectList'][0]['execution']['projectId'].to_s
+     # versionId = cycleInfo['searchObjectList'][0]['execution']['versionId'].to_s
+     # cycleId = cycleInfo['searchObjectList'][0]['execution']['cycleId'].to_s
+     # executionId = cycleInfo['searchObjectList'][0]['execution']['id'].to_s
+
+   #   _c = Zapiclient::Commands::GetExecutions.new({:executionId => executionId})
+   #   _c.execute()
+     #
+     cycleInfo
+    end
+
+    def reset(parms)
+      cycleInfo = _findCycle(parms)
+
+      executionIDs = cycleInfo['searchObjectList'].map { |c| c['execution']['id'] }
+
+      _c = Zapiclient::Commands::UpdateBulkExecutions.new()
+      _c.execute(executionIDs)
+    end
+
+    def createTestFolder(parms)
+      cycleInfo = _findCycle(parms)
+      projectId = cycleInfo['searchObjectList'][0]['execution']['projectId'].to_s
+      versionId = cycleInfo['searchObjectList'][0]['execution']['versionId'].to_s
+      cycleId = cycleInfo['searchObjectList'][0]['execution']['cycleId'].to_s
+
+      _c = Zapiclient::Commands::CreateFolder.new()
+      _c.execute(projectId, versionId, cycleId, "FOOx")
+    end
+
+    def getFolders(parms)
+      cycleInfo = _findCycle(parms)
+      opts = {
+         :projectId => cycleInfo['searchObjectList'][0]['execution']['projectId'].to_s,
+         :versionId => cycleInfo['searchObjectList'][0]['execution']['versionId'].to_s,
+         :cycleId => cycleInfo['searchObjectList'][0]['execution']['cycleId'].to_s
+      }
+
+      _c = Zapiclient::Commands::GetFolders.new(opts)
+      _c.execute
+
+    end
+
+    def searchCycle(parms)
+      cycleInfo = _findCycle(parms)
+
+      puts "[cycleInfo]:"
+      puts JSON.pretty_generate cycleInfo
+
+      projectId = cycleInfo['searchObjectList'][0]['execution']['projectId'].to_s
+      versionId = cycleInfo['searchObjectList'][0]['execution']['versionId'].to_s
+      cycleId = cycleInfo['searchObjectList'][0]['execution']['cycleId'].to_s
+      executionIUd = cycleInfo['searchObjectList'][0]['execution']['id'].to_s
+
+      _c = Zapiclient::Commands::SearchCycle.new(projectId, versionId, cycleId)
+      _c.execute()
+    end
 
     def searchCycles(opts)
       puts __FILE__ + (__LINE__).to_s + " [client.searchCycles]" if @debug
@@ -65,8 +296,6 @@ module Zapiclient
       _c = Zapiclient::Commands::ServerInfo.new()
       _c.execute();
     end
-
-
 
     def updateExecution(record)
       puts __FILE__ + (__LINE__).to_s + " [client.updateExecution]" if @debug
@@ -81,13 +310,15 @@ module Zapiclient
     end
 
     def zqlSearch(searchFor)
-      puts __FILE__ + (__LINE__).to_s + " [client.zqlSearch]: #{searchFor}" if @debug
+      puts __FILE__ + (__LINE__).to_s + " [client.zqlSearch]: #{searchFor}" if Zapiclient::Utils.instance.isVerbose?
       _c = Zapiclient::Commands::ZqlSearch.new()
       _c.searchUsing(searchFor)
       hit = _c.execute()
+      if Zapiclient::Utils.instance.isVerbose?
+        puts __FILE__ + (__LINE__).to_s + " Project => #{_c.getProject()}"
+        puts __FILE__ + (__LINE__).to_s + " hit => #{hit}"
+      end
 
-
-      puts __FILE__ + (__LINE__).to_s + " Project => #{_c.getProject()}" if @debug
       hit
     end
 
@@ -112,7 +343,6 @@ module Zapiclient
      # _c.execute(parms[:project], parms[:cycleName], parms[:testcase])
      _c.execute(parms)
     end
-
 
     # Get test steps for a provided Testcase (Project/Release needed)
     def getAllTestSteps(parms)
@@ -139,7 +369,6 @@ module Zapiclient
 
       if allSteps
         regEx = Regexp.new(step)
-#        testStep = allSteps[:testSteps].find { |s| s['step'].match(/#{step}/)}
         testStep = allSteps[:testSteps].find { |s| s['step'].match(regEx)}
       end
 
@@ -148,8 +377,6 @@ module Zapiclient
 
       return rc
     end
-
-
 
     def getCycleStepResults(parms)
       if !parms.has_key?(:cycleName)
