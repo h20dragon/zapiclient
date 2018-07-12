@@ -53,7 +53,7 @@ module Zapiclient::Commands
 
 
     def getCycleId()
-      @response['searchObjectList']['execution']['cycleId']
+      @response['searchObjectList'][0]['execution']['cycleId']
     end
 
     def getProject()
